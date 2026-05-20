@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Active workstream: P2 — Authentication & Notifications
+
+This branch (`p2/auth-notifications`) is dedicated to the P2 deliverable: a Spring Boot sandbox under `prbs-p2-sandbox/` implementing JWT auth, OTP login, email service, and reminder scheduler.
+
+**Source of truth for scope and sequencing is [task_list.md](task_list.md).** Work strictly within that checklist — do not pull in P1/P3/P4 concerns (booking CRUD, availability editor, admin views, frontend code, deployment). Architecture and reference implementations live in [P2_Independent_Work.md](P2_Independent_Work.md).
+
+The React prototype in `prbs-app/` is untouched by P2 work; it will be wired to the real `/auth/*` endpoints only after P1 delivers entities.
+
 ## Two Versions
 
 This repo contains two parallel implementations of the same prototype:
@@ -73,9 +81,21 @@ All styles are inline CSS-in-JS objects — no CSS files, no Tailwind (except `i
 - Sidebar gradient: `#0F2755 → #0D1F45`
 - Text hierarchy: `#1C1814` (primary), `#7A7069` (secondary), `#B8AFA2` (muted)
 
+### Responsive layout
+
+`prbs-app/src/hooks/useBreakpoint.js` exports `useBreakpoint()` → `{ isMobile, isTablet }`. Breakpoints: `isMobile` = width < 768px, `isTablet` = width < 1024px. Used in `App.jsx`, `Login.jsx`, and all dashboard components to toggle layout — e.g., hamburger menu vs. persistent sidebar, condensed padding, full-screen drawers.
+
+### Sidebar
+
+`Sidebar.jsx` renders role-aware navigation links (different tabs per role), the user avatar/name, notification badge (driven by `notifCount`), and a logout button. On mobile it becomes an overlay drawer controlled by `sidebarOpen` state in `App.jsx`.
+
 ### OTP login
 
 OTP verification is simulated — any 6 digits typed into the OTP inputs will pass. The 6-digit inputs auto-advance focus and support Backspace to go back.
+
+## No tests or linting
+
+There is no test runner and no ESLint/Prettier config in this repo. `npm run build` (Vite) is the only automated check available.
 
 ## Scope & Integration Points
 

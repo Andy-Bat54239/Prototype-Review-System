@@ -18,8 +18,13 @@ class StubController {
         return ResponseEntity.ok("ok");
     }
 
-    @GetMapping("/api/v1/users")
-    ResponseEntity<String> users() {
+    /**
+     * Path under {@code /api/v1/users/**} that doesn't collide with the real
+     * UserController's {@code GET /api/v1/users} list endpoint. Used to assert
+     * that the ADMIN matcher gates the whole subtree.
+     */
+    @GetMapping("/api/v1/users/_stub")
+    ResponseEntity<String> stubUsers() {
         return ResponseEntity.ok("ok");
     }
 

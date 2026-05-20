@@ -2,104 +2,102 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Active workstream: P2 — Authentication & Notifications
+## What this repo contains now
 
-This branch (`p2/auth-notifications`) is dedicated to the P2 deliverable: a Spring Boot sandbox under `prbs-p2-sandbox/` implementing JWT auth, OTP login, email service, and reminder scheduler.
+Three coexisting projects:
 
-**Source of truth for scope and sequencing is [task_list.md](task_list.md).** Work strictly within that checklist — do not pull in P1/P3/P4 concerns (booking CRUD, availability editor, admin views, frontend code, deployment). Architecture and reference implementations live in [P2_Independent_Work.md](P2_Independent_Work.md).
-
-The React prototype in `prbs-app/` is untouched by P2 work; it will be wired to the real `/auth/*` endpoints only after P1 delivers entities.
-
-## Two Versions
-
-This repo contains two parallel implementations of the same prototype:
-
-| | `prbs/` | `prbs-app/` |
+| Directory | Role | Tech |
 |---|---|---|
-| Runtime | Babel Standalone (browser) | Vite + @vitejs/plugin-react |
-| Modules | None (global scope, load order) | ES modules (`import`/`export`) |
-| Run | Open `PRBS.html` in browser | `npm run dev` inside `prbs-app/` |
+| `prbs/` | Original 2025 prototype, Babel Standalone + globals. Reference only — not the active dev target. | HTML + `<script type="text/babel">` |
+| `prbs-app/` | Active React frontend. Still uses mocked data; will be wired to `prbs-backend` by P3. | React 18 + Vite |
+| **`prbs-backend/`** | **Canonical backend.** Integrates P1 (entities/repos/migrations/business rules) and P2 (auth + notifications). Runnable, 75+ tests passing. | Spring Boot 3.2.5 + Java 17 + JPA + Flyway |
 
-**Active development happens in `prbs-app/`.** The `prbs/` directory is the original prototype and should be kept in sync but is not the primary target.
+The earlier `prbs-p2-sandbox/` standalone has been removed; all its classes live in `prbs-backend/` now.
 
-## Running `prbs-app`
+## Branches and history
+
+- **`dev`** — default branch on GitHub. All PRs target this.
+- **`prototype`** — legacy branch with the original React-only state. Kept for history; nothing new lands here.
+- **`p1/entities-for-p2`** — merged into `dev` (PR #1, May 20 2026). Brought in the prbs-backend scaffold + P1 entities/repos/migrations + the full P2 implementation + production hardening.
+- **`p1/booking-availability-admin`** — current branch. Adds the P1 REST controllers (BookingController, AvailabilityController, UserController, SettingsController, MeController) and the business rules around them. PR open against `dev`.
+
+## Source of truth
+
+- **[task_list.md](task_list.md)** — the original P2 task list. Every checkbox is now done.
+- **[P1_TaskList.md](P1_TaskList.md)** — P1 deliverables, mirrors the P2 list's structure. Tracks the work added on `p1/booking-availability-admin`.
+- **[P2_Independent_Work.md](P2_Independent_Work.md)** — the reference implementation P2 worked from. Mostly historical at this point.
+- **[prbs-backend/P1_Handoff_Report.pdf](prbs-backend/P1_Handoff_Report.pdf)** — the structured handoff for the P1 owner from the first wave (entities/repos/migrations only).
+
+## Running `prbs-backend`
 
 ```bash
-cd prbs-app
-npm install   # first time only
-npm run dev   # dev server with HMR
-npm run build # production build
-npm run preview # preview the build
+cd prbs-backend
+export JAVA_HOME="$(/usr/libexec/java_home -v 17)"  # JDK 17 only — Lombok 1.18.30 breaks on Java 22+
+mvn test                                              # full suite
+mvn spring-boot:run                                   # H2 in-memory, app on :8080
+mvn spring-boot:run -Dspring-boot.run.profiles=postgres   # real Postgres
 ```
 
-## Architecture
+Boot does Flyway migrations + seeds 8 demo users (`alice@`, `supervisor@`, `admin@`, …) so the React app and Postman collection work immediately.
 
-PRBS is a **client-side-only prototype** for a capstone project review booking system at AUCA (Adventist University of Central Africa). No backend, no persistence — state resets on every page reload.
+To deliver real email instead of Mailpit, copy `.env.example` → `.env` and `source` it before `mvn spring-boot:run`. See `prbs-backend/README.md`.
 
-### State management
+## Backend at a glance
 
-All state lives in `App.jsx` and flows down via props. No Context, Redux, or other library.
-
-- `bookings` and `availability` are owned by `App.jsx`, passed as props to `StudentDashboard` and `SupervisorDashboard`
-- `AdminPanel` manages its own `users` and `settings` state locally (initialized from `data.js` constants)
-- `notifCount` is derived in `App.jsx` as the count of `confirmed` bookings
-
-### Role-based routing
-
-Role is detected at login time in `Login.jsx` by email string matching:
-- contains `"supervisor"` → `SupervisorDashboard`
-- contains `"admin"` → `AdminPanel`
-- anything else → `StudentDashboard`
-
-`switchRole()` in `App.jsx` maps role strings to hardcoded demo emails and bypasses the login flow.
-
-### Data (`prbs-app/src/data.js`)
-
-All mock data and shared utilities are exported from `data.js`:
-
-```js
-MOCK_USERS          // { id, name, email, role, status }
-MOCK_BOOKINGS_INIT  // { id, studentId, name, group, project, date, time, status, meetUrl }
-MOCK_AVAILABILITY   // { date, start, end, duration, meetUrl }  — start/end as "HH:MM"
-MOCK_SETTINGS_INIT  // { otpExpiry, cancelWindow, reminderTime }  — all in minutes
-ANALYTICS_DATA      // [{ day, sessions }] — used by the Recharts chart in AdminPanel
-TODAY               // hardcoded reference date: new Date('2026-04-23')
-
-generateSlots(avail) // takes an availability object, returns ["HH:MM", ...] slot array
-fmt12(t)             // "HH:MM" → "H:MM AM/PM"
-fmtDate(dateStr)     // "YYYY-MM-DD" → "Monday, 25 April 2026"
+```
+prbs-backend/src/main/java/com/auca/prbs/
+├── PrbsBackendApplication.java   @EnableScheduling
+├── entity/        User, OtpToken, Settings, Booking, Availability + 3 enums
+├── repository/    5 JpaRepositories with the queries the services need
+├── security/      JwtTokenProvider, JwtAuthenticationFilter, SecurityConfig,
+│                   RateLimitFilter, TokenRevocationStore
+├── service/       AuthService, OtpService, EmailService (4 templates),
+│                   BookingService (incl. slot validation + cancel window +
+│                   conflict detection), AvailabilityService (slot generation),
+│                   ReminderScheduler
+├── controller/    AuthController, BookingController, AvailabilityController,
+│                   UserController, SettingsController, MeController
+├── dto/           Validated request/response shapes
+└── exception/     Typed ApiException subclasses + GlobalExceptionHandler
+                   ({code, message} envelope)
 ```
 
-`generateSlots` replaces time slot arrays that were previously inline in `StudentDashboard`.
+## Endpoints
 
-### Styling
+```
+POST   /api/v1/auth/send-otp                {email}                      → 200
+POST   /api/v1/auth/verify-otp              {email, code}                → {accessToken, refreshToken, user}
+POST   /api/v1/auth/refresh                 {refreshToken}               → {accessToken, refreshToken, user}
+POST   /api/v1/auth/logout                  {refreshToken}               → 204
+GET    /api/v1/me                                                        → UserSummary
+POST   /api/v1/bookings                     {availabilityId, slotTime, project, groupNumber}  (STUDENT)
+GET    /api/v1/bookings/me                                               → role-aware list
+PATCH  /api/v1/bookings/{id}/cancel                                      → BookingResponse
+PATCH  /api/v1/bookings/{id}/status         {status}                     (SUPERVISOR)
+GET    /api/v1/availability?supervisorId=&from=                          → list
+POST   /api/v1/availability                 {date, startTime, endTime, durationMinutes, meetUrl}  (SUPERVISOR)
+DELETE /api/v1/availability/{id}                                         (owning SUPERVISOR)
+GET    /api/v1/availability/{id}/slots                                   → SlotResponse[]
+GET    /api/v1/users                                                     (ADMIN)
+PATCH  /api/v1/users/{id}/status            {status}                     (ADMIN)
+GET    /api/v1/settings                                                  (ADMIN)
+PATCH  /api/v1/settings                     partial update               (ADMIN)
+```
 
-All styles are inline CSS-in-JS objects — no CSS files, no Tailwind (except `index.css` which only has a global `* { box-sizing: border-box }` reset). Fonts (DM Sans, Playfair Display) are loaded from Google Fonts in `index.html`.
+## Other things to know
 
-- Primary color: `#1D5BAF`
-- Background: `#F8F5F0`
-- Sidebar gradient: `#0F2755 → #0D1F45`
-- Text hierarchy: `#1C1814` (primary), `#7A7069` (secondary), `#B8AFA2` (muted)
+- **Postman collection** at `prbs-backend/postman/PRBS-Auth.postman_collection.json` — auto-captures the OTP from Mailpit and tokens between requests. Covers the auth flow + rate-limit testing.
+- **JDK 17 only** — Lombok 1.18.30 (pinned by Spring Boot 3.2.5) crashes on Java 22+. The README documents the `JAVA_HOME` workaround.
+- **Production env vars** — `JWT_SECRET`, `MAIL_*`, `CORS_ALLOWED_ORIGINS`, plus `SPRING_PROFILES_ACTIVE=postgres` + `DB_URL` / `DB_USER` / `DB_PASSWORD` for a real deploy. Defaults are dev-only and fire startup WARNs to make the gap obvious.
 
-### Responsive layout
+## What `prbs-app/` still needs
 
-`prbs-app/src/hooks/useBreakpoint.js` exports `useBreakpoint()` → `{ isMobile, isTablet }`. Breakpoints: `isMobile` = width < 768px, `isTablet` = width < 1024px. Used in `App.jsx`, `Login.jsx`, and all dashboard components to toggle layout — e.g., hamburger menu vs. persistent sidebar, condensed padding, full-screen drawers.
+The React frontend is unchanged from its prototype state — simulated OTP, email-string role detection. The contracts are now stable, so wiring it up is P3 (or whoever picks frontend integration):
 
-### Sidebar
+- Replace `Login.jsx`'s simulated OTP with `POST /auth/send-otp` + `/verify-otp`
+- Store the access + refresh tokens in `sessionStorage`
+- Replace the email-substring role match in `App.jsx` with `user.role` from `AuthResponse`
+- Add a fetch interceptor that calls `/auth/refresh` on 401
+- Configure CORS origin if served from a different host
 
-`Sidebar.jsx` renders role-aware navigation links (different tabs per role), the user avatar/name, notification badge (driven by `notifCount`), and a logout button. On mobile it becomes an overlay drawer controlled by `sidebarOpen` state in `App.jsx`.
-
-### OTP login
-
-OTP verification is simulated — any 6 digits typed into the OTP inputs will pass. The 6-digit inputs auto-advance focus and support Backspace to go back.
-
-## No tests or linting
-
-There is no test runner and no ESLint/Prettier config in this repo. `npm run build` (Vite) is the only automated check available.
-
-## Scope & Integration Points
-
-When extending toward production:
-- Replace email-string role detection with a real user lookup
-- Implement real OTP delivery (email/SMS)
-- Replace `MOCK_*` constants with API calls; add session/database persistence
+`prbs-app/`'s internal data model (MOCK_BOOKINGS_INIT, MOCK_AVAILABILITY, etc.) deliberately matches the backend's DTO shapes — wiring is a transport swap, not a model rewrite.

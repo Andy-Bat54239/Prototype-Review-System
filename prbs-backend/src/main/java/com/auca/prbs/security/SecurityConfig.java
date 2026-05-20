@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -19,10 +20,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 import static org.springframework.http.HttpMethod.DELETE;
+import static org.springframework.http.HttpMethod.PATCH;
 import static org.springframework.http.HttpMethod.POST;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -44,6 +47,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/settings/**").hasRole("ADMIN")
                         .requestMatchers(POST,   "/api/v1/availability/**").hasRole("SUPERVISOR")
                         .requestMatchers(DELETE, "/api/v1/availability/**").hasRole("SUPERVISOR")
+                        .requestMatchers(POST,   "/api/v1/bookings").hasRole("STUDENT")
+                        .requestMatchers(PATCH,  "/api/v1/bookings/*/status").hasRole("SUPERVISOR")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

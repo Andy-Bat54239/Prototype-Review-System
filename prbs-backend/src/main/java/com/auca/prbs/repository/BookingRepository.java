@@ -22,4 +22,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByStudentIdOrderBySlotAtDesc(Long studentId);
 
     List<Booking> findBySupervisorIdOrderBySlotAtDesc(Long supervisorId);
+
+    /** Slot-conflict guard: another CONFIRMED booking already holds this supervisor's slot. */
+    boolean existsBySupervisorIdAndSlotAtAndStatus(Long supervisorId, LocalDateTime slotAt, BookingStatus status);
 }

@@ -100,6 +100,13 @@
             <version>2.0.1</version>
             <scope>test</scope>
         </dependency>
+        <!-- TestRestTemplate auto-detects httpclient5 and uses it instead of HttpURLConnection,
+             which is required because the JDK's HttpURLConnection doesn't support PATCH. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

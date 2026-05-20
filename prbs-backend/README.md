@@ -45,6 +45,19 @@ POST /api/v1/auth/logout       {refreshToken}                       → 204
 
 Authorization: `Bearer <accessToken>` on all non-`/auth/**` routes.
 
+## Sending real emails (Outlook / Gmail / SendGrid)
+
+Defaults talk to Mailpit on `localhost:1025`. To deliver to a real inbox, copy `.env.example` to `.env`, uncomment one provider block, then load + run:
+
+```bash
+cp .env.example .env
+$EDITOR .env                            # fill in MAIL_HOST/PORT/USERNAME/PASSWORD/FROM
+set -a; source .env; set +a             # export every variable
+mvn spring-boot:run
+```
+
+`.env` is gitignored; the template (`.env.example`) is committed and explains each variable. Without a `.env`, the app still runs against Mailpit — env vars only kick in when set.
+
 ## Production deploy checklist
 
 Set these env vars (defaults are dev-only and will fire a startup WARN):
@@ -57,4 +70,5 @@ export SPRING_PROFILES_ACTIVE=postgres
 export DB_URL="jdbc:postgresql://..."
 export DB_USER="..."
 export DB_PASSWORD="..."
+# plus the MAIL_* variables from .env.example
 ```

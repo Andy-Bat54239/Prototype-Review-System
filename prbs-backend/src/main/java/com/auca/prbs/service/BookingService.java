@@ -92,26 +92,26 @@ public class BookingService {
     }
 
     /**
-     * Cancel by the booking's student or supervisor. Students are gated by
-     * {@code settings.cancel_window}; supervisors can always cancel.
+     * Cancel by the booking's student or supervisor. The {@code settings.cancel_window}
+     * applies symmetrically to both — letting supervisors cancel at the last minute
+     * would surprise students who already prepared to attend. Admins (out of scope
+     * here) can bypass via a future force-cancel endpoint.
      */
     @Transactional
     public Booking cancelBookingByUser(Long bookingId, Long requestingUserId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(BookingNotFoundException::new);
 
-        boolean isStudent    = booking.getStudentId().equals(requestingUserId);
-        boolean isSupervisor = booking.getSupervisorId().equals(requestingUserId);
-        if (!isStudent && !isSupervisor) throw new BookingAccessDeniedException();
+        boolean isParticipant = booking.getStudentId().equals(requestingUserId)
+                             || booking.getSupervisorId().equals(requestingUserId);
+        if (!isParticipant) throw new BookingAccessDeniedException();
 
-        if (isStudent) {
-            int cancelWindow = settingsRepository.findById(Settings.SINGLETON_ID)
-                    .map(Settings::getCancelWindow)
-                    .orElse(60);
-            LocalDateTime cutoff = booking.getSlotAt().minusMinutes(cancelWindow);
-            if (LocalDateTime.now().isAfter(cutoff)) {
-                throw new CancelWindowExceededException(cancelWindow);
-            }
+        int cancelWindow = settingsRepository.findById(Settings.SINGLETON_ID)
+                .map(Settings::getCancelWindow)
+                .orElse(60);
+        LocalDateTime cutoff = booking.getSlotAt().minusMinutes(cancelWindow);
+        if (LocalDateTime.now().isAfter(cutoff)) {
+            throw new CancelWindowExceededException(cancelWindow);
         }
 
         booking.setStatus(BookingStatus.CANCELLED);

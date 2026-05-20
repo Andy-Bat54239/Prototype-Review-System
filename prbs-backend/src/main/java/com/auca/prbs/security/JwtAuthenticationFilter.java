@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -39,7 +40,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     var authority = new SimpleGrantedAuthority("ROLE_" + role);
                     var auth = new UsernamePasswordAuthenticationToken(userId, null, List.of(authority));
-                    SecurityContextHolder.getContext().setAuthentication(auth);
+
+                    // Spring Security 6: create a fresh context and set it, rather than
+                    // mutating the existing one. Without this, downstream filters can see
+                    // the user as anonymous and return 401 on role mismatch instead of 403.
+                    SecurityContext context = SecurityContextHolder.createEmptyContext();
+                    context.setAuthentication(auth);
+                    SecurityContextHolder.setContext(context);
                 }
             } catch (JwtException | IllegalArgumentException ignored) {
                 // Invalid token — leave SecurityContext empty; downstream returns 401.

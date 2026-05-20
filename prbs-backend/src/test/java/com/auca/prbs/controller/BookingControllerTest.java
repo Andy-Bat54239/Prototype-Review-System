@@ -187,7 +187,25 @@ class BookingControllerTest {
     }
 
     @Test
-    void cancel_withinCancelWindow_returns409() {
+    void cancel_asSupervisorWithinCancelWindow_returns409() {
+        // Supervisor is held to the same cancel-window rule as students (Gap 4).
+        Booking saved = bookingRepository.save(Booking.builder()
+                .studentId(ALICE_ID).supervisorId(SUPERVISOR_ID).name("Alice")
+                .groupNumber(1).project("Imminent")
+                .slotAt(LocalDateTime.now().plusMinutes(5))
+                .status(BookingStatus.CONFIRMED)
+                .meetUrl("https://meet.google.com/x").reminderSent(false).build());
+
+        var resp = http.exchange("/api/v1/bookings/" + saved.getId() + "/cancel",
+                HttpMethod.PATCH, entityWithToken(null, SUPERVISOR_ID, "SUPERVISOR"),
+                String.class);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(resp.getBody()).contains("CANCEL_WINDOW_EXCEEDED");
+    }
+
+    @Test
+    void cancel_asStudentWithinCancelWindow_returns409() {
         // Slot starts in 5 minutes — well inside the 60-min cancel window.
         Booking saved = bookingRepository.save(Booking.builder()
                 .studentId(ALICE_ID).supervisorId(SUPERVISOR_ID).name("Alice")

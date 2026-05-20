@@ -25,4 +25,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     /** Slot-conflict guard: another CONFIRMED booking already holds this supervisor's slot. */
     boolean existsBySupervisorIdAndSlotAtAndStatus(Long supervisorId, LocalDateTime slotAt, BookingStatus status);
+
+    /** All bookings for one supervisor on one calendar day — used to mark slots as taken. */
+    List<Booking> findBySupervisorIdAndSlotAtBetween(Long supervisorId, LocalDateTime from, LocalDateTime until);
 }

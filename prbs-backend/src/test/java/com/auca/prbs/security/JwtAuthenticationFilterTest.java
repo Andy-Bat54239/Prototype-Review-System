@@ -59,7 +59,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void authRoutes_arePublic() throws Exception {
-        mvc.perform(post("/api/v1/auth/send-otp")
+        mvc.perform(post("/api/v1/auth/_stub")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"alice@university.ac.rw\"}"))
                 .andExpect(status().isOk());
@@ -86,13 +86,13 @@ class JwtAuthenticationFilterTest {
     @Test
     void elevenRapidAuthRequests_fromSameClient_429sTheLastOne() throws Exception {
         for (int i = 0; i < RateLimitFilter.MAX_REQUESTS_PER_MINUTE; i++) {
-            mvc.perform(post("/api/v1/auth/send-otp")
+            mvc.perform(post("/api/v1/auth/_stub")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(status().isOk());
         }
 
-        mvc.perform(post("/api/v1/auth/send-otp")
+        mvc.perform(post("/api/v1/auth/_stub")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isTooManyRequests())

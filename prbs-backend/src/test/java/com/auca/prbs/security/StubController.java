@@ -23,8 +23,13 @@ class StubController {
         return ResponseEntity.ok("ok");
     }
 
-    @PostMapping("/api/v1/auth/send-otp")
-    ResponseEntity<String> sendOtp(@RequestBody(required = false) String body) {
+    /**
+     * Distinctive path under /api/v1/auth/** that doesn't collide with the real
+     * {@link com.auca.prbs.controller.AuthController}. Lets us assert the
+     * permitAll rule covers the whole subtree without overlapping mappings.
+     */
+    @PostMapping("/api/v1/auth/_stub")
+    ResponseEntity<String> stubAuth(@RequestBody(required = false) String body) {
         return ResponseEntity.ok("ok");
     }
 }

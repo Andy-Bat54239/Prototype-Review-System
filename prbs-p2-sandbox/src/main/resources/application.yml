@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: prbs-p2-sandbox
+  mail:
+    host: localhost
+    port: 1025
+    username: ""
+    password: ""
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+
+jwt:
+  secret: prbs-local-dev-secret-must-be-at-least-32-chars
+
+mail:
+  from: noreply@auca.ac.rw

@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -50,6 +51,43 @@ class OtpServiceTest {
         result.token().setExpiresAt(LocalDateTime.now().minusMinutes(1));
 
         assertFalse(otpService.verify(result.plainCode(), result.token()));
+    }
+
+    @Test
+    void wrongCode_incrementsAttemptCounter() {
+        var result = otpService.generate(1L, 10);
+        String wrong = "000000".equals(result.plainCode()) ? "111111" : "000000";
+
+        otpService.verify(wrong, result.token());
+
+        assertEquals(1, result.token().getAttempts());
+    }
+
+    @Test
+    void afterFiveWrongAttempts_correctCode_isStillRejected() {
+        var result = otpService.generate(1L, 10);
+        String wrong = "000000".equals(result.plainCode()) ? "111111" : "000000";
+
+        for (int i = 0; i < OtpService.MAX_ATTEMPTS; i++) {
+            otpService.verify(wrong, result.token());
+        }
+        assertEquals(OtpService.MAX_ATTEMPTS, result.token().getAttempts());
+
+        assertFalse(otpService.verify(result.plainCode(), result.token()),
+                "token must be locked after MAX_ATTEMPTS failures");
+    }
+
+    @Test
+    void correctCodeBeforeLockout_succeeds() {
+        var result = otpService.generate(1L, 10);
+        String wrong = "000000".equals(result.plainCode()) ? "111111" : "000000";
+
+        for (int i = 0; i < OtpService.MAX_ATTEMPTS - 1; i++) {
+            otpService.verify(wrong, result.token());
+        }
+
+        assertTrue(otpService.verify(result.plainCode(), result.token()),
+                "one attempt remaining should still allow success");
     }
 
     @Test

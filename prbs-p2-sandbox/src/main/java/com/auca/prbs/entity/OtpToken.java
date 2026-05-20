@@ -20,4 +20,6 @@ public class OtpToken {
     private String tokenHash;
     private LocalDateTime expiresAt;
     private boolean used;
+    /** Failed verification attempts. Token is locked once this reaches OtpService.MAX_ATTEMPTS. */
+    private int attempts;
 }

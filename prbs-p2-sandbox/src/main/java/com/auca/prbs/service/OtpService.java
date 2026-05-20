@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 @Service
 public class OtpService {
 
+    /** Token is locked (no further verifies accepted) once this many failures occur. */
+    public static final int MAX_ATTEMPTS = 5;
+
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private final SecureRandom random = new SecureRandom();
 
@@ -27,15 +30,29 @@ public class OtpService {
                 .tokenHash(hash)
                 .expiresAt(LocalDateTime.now().plusMinutes(expiryMinutes))
                 .used(false)
+                .attempts(0)
                 .build();
 
         return new OtpResult(plain, token);
     }
 
+    /**
+     * Verifies a submitted code against the token. Mutates the token's
+     * {@code attempts} counter on a failed match so the caller can persist it.
+     *
+     * Returns false (without checking the code) if the token is null, used,
+     * expired, or already at {@link #MAX_ATTEMPTS} — the lockout state.
+     */
     public boolean verify(String submittedCode, OtpToken token) {
         if (token == null)                                       return false;
         if (token.isUsed())                                      return false;
         if (token.getExpiresAt().isBefore(LocalDateTime.now()))  return false;
-        return encoder.matches(submittedCode, token.getTokenHash());
+        if (token.getAttempts() >= MAX_ATTEMPTS)                 return false;
+
+        boolean matches = encoder.matches(submittedCode, token.getTokenHash());
+        if (!matches) {
+            token.setAttempts(token.getAttempts() + 1);
+        }
+        return matches;
     }
 }

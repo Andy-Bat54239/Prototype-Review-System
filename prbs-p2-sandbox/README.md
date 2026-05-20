@@ -10,7 +10,7 @@ Standalone project so P2 work is testable in isolation while P1 builds entities 
 |---|---|
 | Java | **17 LTS exactly** — Lombok's annotation processor is broken on Java 22+. POM targets 17 either way |
 | Maven | 3.9.x |
-| MailHog | latest — for `EmailServiceTest` |
+| Mailpit (or MailHog) | latest — for visually inspecting rendered templates. `EmailServiceTest` itself uses embedded GreenMail, so no external SMTP is needed for `mvn test`. |
 
 If your default `java` is newer than 17, point `JAVA_HOME` at a JDK 17 before running Maven:
 
@@ -19,19 +19,33 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 17)"   # macOS
 mvn test
 ```
 
-Install MailHog (macOS):
+Install Mailpit (macOS) — MailHog was removed from Homebrew core; Mailpit is the actively-maintained drop-in (same default ports 1025 / 8025):
 ```bash
-brew install mailhog
-mailhog   # SMTP on :1025, web UI at http://localhost:8025
+brew install mailpit
+mailpit
 ```
+Then open http://localhost:8025
 
 ## Commands
 
+Run all P2 tests:
 ```bash
-mvn test                                              # run all P2 tests
-mvn test -Dtest=JwtTokenProviderTest                  # one class
-mvn test -Dtest=OtpServiceTest#correct_code_verifies  # one method
-mvn spring-boot:run                                   # boot the app (port 8080)
+mvn test
+```
+
+Run one class:
+```bash
+mvn test -Dtest=JwtTokenProviderTest
+```
+
+Run one method (`#` here is Surefire's method-selector syntax — fine in a shell, but do **not** add trailing `# comments` because IntelliJ's Maven runner doesn't strip them):
+```bash
+mvn test -Dtest=OtpServiceTest#correctCode_verifiesSuccessfully
+```
+
+Boot the app (port 8080):
+```bash
+mvn spring-boot:run
 ```
 
 ## Status

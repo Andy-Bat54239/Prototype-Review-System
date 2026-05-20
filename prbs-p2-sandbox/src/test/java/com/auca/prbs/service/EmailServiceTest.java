@@ -13,6 +13,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -76,5 +77,40 @@ class EmailServiceTest {
         MimeMessage[] received = greenMail.getReceivedMessages();
         assertEquals(1, received.length);
         assertTrue(received[0].getSubject().startsWith("Reminder:"));
+    }
+
+    @Test
+    void htmlInjectionInName_isEscaped() throws Exception {
+        String maliciousName = "<script>alert('xss')</script>Alice";
+
+        emailService.sendOtp("alice@university.ac.rw", maliciousName, "111111");
+
+        String body = GreenMailUtil.getBody(greenMail.getReceivedMessages()[0]);
+        assertFalse(body.contains("<script>alert"), "raw <script> tag must not appear in body");
+        assertTrue(body.contains("&lt;script&gt;"), "tags must be HTML-escaped");
+    }
+
+    @Test
+    void javascriptMeetUrl_isReplacedWithHash() throws Exception {
+        emailService.sendBookingConfirmation(
+                "alice@university.ac.rw", "Alice",
+                "Project X", "Mon", "9 AM",
+                "javascript:alert(1)");
+
+        String body = decodedBody(greenMail.getReceivedMessages()[0]);
+        assertFalse(body.contains("javascript:"), "javascript: URL must not appear in href");
+        assertTrue(body.contains("href=\"#\""), "untrusted URL scheme must collapse to '#'");
+    }
+
+    /**
+     * Decodes the minimal quoted-printable artefacts JavaMail applies to our HTML
+     * (soft line breaks and `=3D` for `=`). Enough for substring assertions; not a
+     * full QP decoder.
+     */
+    private static String decodedBody(MimeMessage m) throws Exception {
+        return GreenMailUtil.getBody(m)
+                .replace("=\r\n", "")
+                .replace("=\n", "")
+                .replace("=3D", "=");
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -74,7 +75,7 @@ public class EmailService {
                 </p>
               </div>
             </div>
-            """.formatted(name, otp);
+            """.formatted(esc(name), esc(otp));
     }
 
     private String buildConfirmationHtml(String name, String project,
@@ -108,7 +109,7 @@ public class EmailService {
                 </a>
               </div>
             </div>
-            """.formatted(name, project, date, time, meetUrl);
+            """.formatted(esc(name), esc(project), esc(date), esc(time), escAttr(meetUrl));
     }
 
     private String buildReminderHtml(String name, String project,
@@ -136,6 +137,25 @@ public class EmailService {
                 </a>
               </div>
             </div>
-            """.formatted(name, project, date, time, meetUrl);
+            """.formatted(esc(name), esc(project), esc(date), esc(time), escAttr(meetUrl));
+    }
+
+    /** HTML-escape text content. Empty string for null inputs to keep templates well-formed. */
+    private static String esc(String s) {
+        return HtmlUtils.htmlEscape(s == null ? "" : s);
+    }
+
+    /**
+     * Stricter escape for values placed inside an attribute (here: an href).
+     * Only `https://`, `http://`, and `mailto:` URLs are allowed through verbatim
+     * after HTML-escaping; anything else (e.g. `javascript:`) is replaced with `#`.
+     */
+    private static String escAttr(String url) {
+        if (url == null) return "#";
+        String lower = url.trim().toLowerCase();
+        boolean allowed = lower.startsWith("https://")
+                       || lower.startsWith("http://")
+                       || lower.startsWith("mailto:");
+        return allowed ? HtmlUtils.htmlEscape(url) : "#";
     }
 }

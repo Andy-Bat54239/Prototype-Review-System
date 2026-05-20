@@ -10,8 +10,16 @@ spring:
       mail.smtp.auth: false
       mail.smtp.starttls.enable: false
 
+# Read from environment in any non-dev deployment.
+# The committed fallback exists only so `mvn spring-boot:run` works locally
+# without extra setup. JwtTokenProvider logs a WARN if this fallback is in use.
 jwt:
-  secret: prbs-local-dev-secret-must-be-at-least-32-chars
+  secret: ${JWT_SECRET:dev-only-fallback-secret-do-not-use-in-production-min-32}
 
 mail:
-  from: noreply@auca.ac.rw
+  from: ${MAIL_FROM:noreply@auca.ac.rw}
+
+# Comma-separated list of allowed CORS origins for the React frontend.
+# Override per environment.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

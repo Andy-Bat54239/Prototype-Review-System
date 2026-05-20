@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,5 +62,30 @@ class JwtTokenProviderTest {
         Thread.sleep(50);
 
         assertFalse(shortLived.isValid(token));
+    }
+
+    @Test
+    void refreshToken_carriesJtiClaim() {
+        String token = jwt.generateRefreshToken(1L);
+
+        String jti = jwt.getJti(token);
+        assertNotNull(jti, "refresh tokens must include a JTI for revocation addressing");
+        assertFalse(jti.isBlank());
+    }
+
+    @Test
+    void accessToken_hasNoJtiClaim() {
+        // Access tokens are short-lived and not revocable; no JTI to track.
+        String token = jwt.generateAccessToken(1L, "STUDENT");
+
+        assertNull(jwt.getJti(token));
+    }
+
+    @Test
+    void twoRefreshTokens_haveDistinctJtis() {
+        String a = jwt.getJti(jwt.generateRefreshToken(1L));
+        String b = jwt.getJti(jwt.generateRefreshToken(1L));
+
+        assertNotEquals(a, b, "JTIs must be unique so individual tokens can be revoked");
     }
 }

@@ -1,5 +1,6 @@
 package com.auca.prbs.auth.service;
 
+import com.auca.prbs.auth.client.NotificationClient;
 import com.auca.prbs.auth.client.UserServiceClient;
 import com.auca.prbs.auth.client.UserView;
 import com.auca.prbs.auth.dto.AuthResponse;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -25,8 +27,9 @@ public class AuthService {
     private static final long EQUALIZED_PAUSE_MS = 120;
 
     private final UserServiceClient userServiceClient;
+    private final NotificationClient notificationClient;
+    private final OtpEmailSender otpEmailSenderFallback;
     private final OtpService otpService;
-    private final OtpEmailSender otpEmailSender;
     private final JwtTokenProvider jwtTokenProvider;
     private final TokenRevocationStore tokenRevocationStore;
     private final RateLimiter rateLimiter;
@@ -46,11 +49,26 @@ public class AuthService {
         if (maybe.isPresent() && "ACTIVE".equals(maybe.get().status())) {
             UserView user = maybe.get();
             String code = otpService.generateAndPersist(user.id(), otpExpiryMinutes);
-            otpEmailSender.sendOtp(user.email(), user.name(), code);
+            deliverOtp(user, code);
         } else {
             log.debug("send-otp called for {} — no-op (unknown or inactive)", email);
         }
         equalize(startNs);
+    }
+
+    /**
+     * Try notification-service first; if it's unreachable (it's the only thing
+     * standing between a user and being able to log in), fall back to inline SMTP.
+     * Auth must work even when other services degrade.
+     */
+    private void deliverOtp(UserView user, String code) {
+        try {
+            notificationClient.sendOtp(Map.of(
+                    "email", user.email(), "name", user.name(), "code", code));
+        } catch (Exception e) {
+            log.warn("notification-service unreachable; falling back to inline OTP email: {}", e.getMessage());
+            otpEmailSenderFallback.sendOtp(user.email(), user.name(), code);
+        }
     }
 
     public AuthResponse verifyOtp(String email, String code) {

@@ -30,6 +30,12 @@ public class SecurityConfig {
                 .cors(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Swagger UI + spec — only reachable when the service port is
+                        // exposed directly to the host (gateway doesn't route these).
+                        .requestMatchers(
+                                "/swagger-ui.html", "/swagger-ui/**",
+                                "/v3/api-docs/**", "/v3/api-docs.yaml"
+                        ).permitAll()
                         .requestMatchers(POST,   "/api/v1/availability/**").hasRole("SUPERVISOR")
                         .requestMatchers(DELETE, "/api/v1/availability/**").hasRole("SUPERVISOR")
                         .requestMatchers(POST,   "/api/v1/bookings").hasRole("STUDENT")

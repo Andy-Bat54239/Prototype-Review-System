@@ -13,14 +13,10 @@ import java.util.Optional;
 @FeignClient(name = "user-service")
 public interface UserServiceClient {
 
-    @GetMapping("/api/v1/users/by-email")
+    @GetMapping("/internal/users/by-email")
     Optional<UserView> findByEmail(@RequestParam("email") String email);
 
-    /**
-     * Looks up a user by id. user-service exposes this on a future
-     * {@code /api/v1/users/{id}} admin endpoint; booking-service hits it
-     * via an internal route that doesn't require an admin token (in-cluster only).
-     */
-    @GetMapping("/api/v1/users/by-id/{id}")
+    /** In-cluster lookup by id — used to resolve student/supervisor for emails + responses. */
+    @GetMapping("/internal/users/by-id/{id}")
     Optional<UserView> findById(@org.springframework.web.bind.annotation.PathVariable("id") Long id);
 }

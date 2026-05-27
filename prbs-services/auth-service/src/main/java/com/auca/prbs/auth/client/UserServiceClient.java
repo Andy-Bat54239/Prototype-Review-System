@@ -8,14 +8,13 @@ import java.util.Optional;
 
 /**
  * Synchronous lookup against user-service. Eureka resolves the logical name
- * {@code user-service} to a concrete instance.
- *
- * <p>The user-service must expose {@code GET /api/v1/users/by-email?email=...}
- * as an INTERNAL endpoint (no auth required, but only reachable in-cluster).
+ * {@code user-service} to a concrete instance. Calls land on the
+ * {@code /internal/*} path tree which the API gateway does not route — only
+ * reachable inside the cluster.
  */
-@FeignClient(name = "user-service", path = "/api/v1/users")
+@FeignClient(name = "user-service")
 public interface UserServiceClient {
 
-    @GetMapping("/by-email")
+    @GetMapping("/internal/users/by-email")
     Optional<UserView> findByEmail(@RequestParam("email") String email);
 }

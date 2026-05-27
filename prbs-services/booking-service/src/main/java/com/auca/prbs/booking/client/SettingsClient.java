@@ -7,6 +7,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 public interface SettingsClient {
 
     /** Internal lookup; user-service exposes a no-auth endpoint for cluster use. */
-    @GetMapping("/api/v1/settings/internal")
+    @GetMapping("/internal/settings")
     SettingsView get();
 }

@@ -36,12 +36,4 @@ public class SettingsController {
         return ResponseEntity.ok(SettingsResponse.of(settingsRepository.save(s)));
     }
 
-    /**
-     * In-cluster read for booking-service. Public on the internal network but
-     * not exposed by the gateway. Same trust model as /api/v1/users/by-email.
-     */
-    @GetMapping("/internal")
-    public SettingsResponse internalGet() {
-        return SettingsResponse.of(settingsRepository.findById(Settings.SINGLETON_ID).orElseThrow());
-    }
 }

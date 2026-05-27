@@ -28,11 +28,19 @@ public class SecurityConfig {
                 .cors(AbstractHttpConfigurer::disable)  // CORS handled at the gateway
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // In-cluster lookups used by auth-service + booking-service.
-                        // Reachable only on the internal network; the gateway doesn't route them.
-                        .requestMatchers(GET, "/api/v1/users/by-email").permitAll()
-                        .requestMatchers(GET, "/api/v1/users/by-id/*").permitAll()
-                        .requestMatchers(GET, "/api/v1/settings/internal").permitAll()
+                        // Swagger UI + OpenAPI spec — direct-to-service only (the gateway
+                        // doesn't route these paths, and binding them via the gateway is a
+                        // separate aggregation problem we're not solving here).
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml"
+                        ).permitAll()
+                        // In-cluster lookups consumed by other services. The gateway
+                        // only routes /api/v1/* — it won't proxy /internal/* — so these
+                        // are reachable only on the Docker / k8s internal network.
+                        .requestMatchers("/internal/**").permitAll()
                         .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/settings/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/me").authenticated()

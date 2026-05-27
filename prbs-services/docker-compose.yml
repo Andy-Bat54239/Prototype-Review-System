@@ -1,9 +1,15 @@
 # One-command local dev for the microservices stack.
-# Run:  docker-compose up --build
+# Run:  docker compose up --build
 #
-# Mailpit web UI: http://localhost:8025
-# Eureka dashboard: http://localhost:8761
-# Gateway: http://localhost:8080 (this is what the frontend talks to)
+# Eureka dashboard:     http://localhost:8761
+# Mailpit web UI:       http://localhost:8025
+# Gateway (public API): http://localhost:8080
+#
+# Swagger UIs (one per service, direct-to-port):
+#   http://localhost:8081/swagger-ui.html   auth-service
+#   http://localhost:8082/swagger-ui.html   user-service
+#   http://localhost:8083/swagger-ui.html   booking-service
+#   http://localhost:8085/swagger-ui.html   notification-service
 services:
   mailpit:
     image: axllent/mailpit:latest
@@ -35,6 +41,8 @@ services:
       dockerfile: user-service/Dockerfile
     environment:
       EUREKA_URL: http://eureka:8761/eureka/
+    ports:
+      - "8082:8082"   # exposed so http://localhost:8082/swagger-ui.html is reachable
     depends_on:
       - eureka
 
@@ -46,6 +54,8 @@ services:
       EUREKA_URL: http://eureka:8761/eureka/
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
+    ports:
+      - "8081:8081"
     depends_on:
       - eureka
       - user-service
@@ -57,6 +67,8 @@ services:
       dockerfile: booking-service/Dockerfile
     environment:
       EUREKA_URL: http://eureka:8761/eureka/
+    ports:
+      - "8083:8083"
     depends_on:
       - eureka
 
@@ -68,10 +80,8 @@ services:
       EUREKA_URL: http://eureka:8761/eureka/
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
+    ports:
+      - "8085:8085"
     depends_on:
       - eureka
       - mailpit
-
-# Dockerfiles are not yet written — that lands with Step 1 of MIGRATION.md when
-# we also add the Postgres backing store. For now, run services directly with
-# `mvn spring-boot:run` from each module.

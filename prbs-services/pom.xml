@@ -81,6 +81,19 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
+                    <executions>
+                        <!-- Without this, the `package` phase produces a thin jar with no
+                             Main-Class manifest entry, so `java -jar app.jar` fails with
+                             "no main manifest attribute". spring-boot-starter-parent ties
+                             this automatically; using spring-boot-dependencies (as we do)
+                             requires it explicitly. -->
+                        <execution>
+                            <id>repackage</id>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                     <configuration>
                         <excludes>
                             <exclude>

@@ -75,10 +75,13 @@
             <version>2.0.1</version>
             <scope>test</scope>
         </dependency>
+        <!-- Spring Cloud 2023.0.x's Eureka client transport uses HttpClient5 at
+             runtime; without it the discovery client fails to register
+             ("NoClassDefFoundError org/apache/hc/client5/http/classic/HttpClient").
+             Compile scope so it's on both the test and runtime classpath. -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 

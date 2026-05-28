@@ -7,55 +7,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Directory | Role | Tech |
 |---|---|---|
 | `prbs/` | Original 2025 prototype, Babel Standalone + globals. Reference only — not the active dev target. | HTML + `<script type="text/babel">` |
-| `prbs-app/` | Active React frontend. Still uses mocked data; the next workstream wires it to the gateway. | React 18 + Vite |
-| **`prbs-services/`** | **Active backend.** 7-module Spring Cloud microservices: gateway + Eureka + 4 services + shared library. Replaced the monolith. | Spring Boot 3.2.5 + Spring Cloud 2023.0.1 + Java 17 |
+| `prbs-app/` | Active React frontend. Still uses mocked data; the next workstream wires it to the backend. | React 18 + Vite |
+| **`prbs-backend/`** | **Active backend.** Modular monolith — one Spring Boot deployable, package-level module boundaries that mirror what microservices would have. | Spring Boot 3.2.5 + Java 17 |
 
-The monolith (`prbs-backend/`) and the P2 sandbox (`prbs-p2-sandbox/`) have both been retired — their code lives in `prbs-services/` now.
+The P2 sandbox (`prbs-p2-sandbox/`) and the prior `prbs-services/` microservices workspace have both been retired — their code lives in `prbs-backend/` now.
 
 ## Branches and history
 
 - **`dev`** — default branch on GitHub. All PRs target this.
 - **`prototype`** — legacy branch with the original React-only state. Kept for history; nothing new lands here.
-- **`p1/entities-for-p2`** — merged into `dev` (PR #1). The monolith with P1 entities + P2 auth/notifications.
-- **`p1/booking-availability-admin`** — open against `dev` (PR #2). P1 REST controllers + admin + CSV import + 4 hardening gaps closed.
-- **`feat/microservices`** — open against `dev` (PR #3). **Splits everything into prbs-services/, deletes prbs-backend.** This is the active branch.
+- **`p1/entities-for-p2`** — merged into `dev` (PR #1). Monolith with P1 entities + P2 auth/notifications.
+- **`p1/booking-availability-admin`** — merged into `dev` (PR #2). P1 REST controllers + admin + CSV import + 4 hardening gaps closed.
+- **`feat/microservices`** — superseded. Split into `prbs-services/`; subsequently collapsed back into a modular monolith.
+- **`refactor/modular-monolith`** — active. Collapses `prbs-services/` into `prbs-backend/` with package-level module boundaries.
 
-## Microservices layout
+## Package layout (the module boundaries)
 
 ```
-prbs-services/
-├── pom.xml                  parent (Spring Boot 3.2.5 + Spring Cloud 2023.0.1)
-├── README.md                run instructions + architecture diagram
-├── MIGRATION.md             how the monolith was carved up
-├── docker-compose.yml       one-command local dev (Mailpit + 6 JVMs)
+prbs-backend/src/main/java/com/auca/prbs/
+├── PrbsApplication.java
 │
-├── eureka-server/    :8761  service discovery
-├── api-gateway/      :8080  Spring Cloud Gateway, route-by-path, CORS
-├── prbs-shared/             cross-cutting: JwtTokenProvider + JwtAuthenticationFilter + ErrorResponse
+├── config/         cross-cutting only
+│       ApiException, ErrorResponse, GlobalExceptionHandler,
+│       SecurityConfig, JwtAuthenticationFilter
 │
-├── auth-service/     :8081  OTP, JWT issue/refresh/logout, in-memory revocation,
-│                            per-email rate limit. Owns otp_tokens table. Calls
-│                            user-service for user lookups; notification-service
-│                            (with inline SMTP fallback) for OTP email delivery.
+├── auth/           OTP, JWT, AuthController, rate limiter, token revocation
+│       controller/ AuthController
+│       service/    AuthService, OtpService, OtpEmailSender,
+│                   JwtTokenProvider, TokenRevocationStore, RateLimiter
+│       entity/     OtpToken
+│       repository/ OtpTokenRepository
+│       dto/        SendOtpRequest, VerifyOtpRequest, RefreshRequest, AuthResponse
+│       exception/  OtpInvalidException, TokenInvalidException, TooManyRequestsException
 │
-├── user-service/     :8082  User + Settings entities, admin endpoints
-│                            (UserController, SettingsController), CSV bulk-import,
-│                            MeController. Owns users + settings tables. Exposes
-│                            in-cluster /by-email, /by-id/{id}, /settings/internal
-│                            for other services to read.
+├── user/           User + Settings, admin endpoints, CSV import
+│       controller/ MeController, UserController, SettingsController
+│       service/    UserImportService
+│       entity/     User, UserRole, UserStatus, Settings
+│       repository/ UserRepository, SettingsRepository
+│       dto/        UserResponse, UserSummary, UpdateUserStatusRequest,
+│                   ImportUsersResponse, ImportUserError,
+│                   SettingsResponse, UpdateSettingsRequest
+│       exception/  UserNotFoundException
 │
-├── booking-service/  :8083  Booking + Availability entities, BookingController,
-│                            AvailabilityController, slot generation, conflict +
-│                            cancel-window business rules, ReminderScheduler
-│                            (@Scheduled cron). Owns bookings + availability tables.
-│                            Feign-calls user-service for participants and
-│                            notification-service to fire emails.
+├── booking/        Booking, BookingController, BookingService rules
+│       controller/ BookingController
+│       service/    BookingService
+│       entity/     Booking, BookingStatus
+│       repository/ BookingRepository
+│       dto/        CreateBookingRequest, UpdateBookingStatusRequest, BookingResponse
+│       exception/  BookingNotFoundException, SlotConflictException,
+│                   SlotOutsideAvailabilityException, CancelWindowExceededException,
+│                   BookingAccessDeniedException, InvalidBookingStatusException
 │
-└── notification-service/ :8085  EmailService with 4 AUCA-branded templates
-                                  (OTP, booking confirmation, reminder, supervisor
-                                  alert). No DB. Reachable only on /internal/emails/*;
-                                  the gateway doesn't route /internal/*.
+├── availability/   Availability + slot generation
+│       controller/ AvailabilityController
+│       service/    AvailabilityService
+│       entity/     Availability
+│       repository/ AvailabilityRepository
+│       dto/        AvailabilityRequest, AvailabilityResponse, SlotResponse
+│       exception/  AvailabilityNotFoundException, AvailabilityAccessDeniedException
+│
+└── notification/   Booking-related emails + ReminderScheduler
+        service/    EmailService, ReminderScheduler
 ```
+
+One Maven module, one JVM, one database. The discipline lives in the package layout: each module owns its `entity/`, `repository/`, `controller/`, `dto/`, `exception/`, `service/` subpackages. Cross-module reads go through the owning service or repository injected at the boundary — never by reaching into another module's internals.
 
 ## Running locally
 
@@ -63,83 +80,69 @@ Requires JDK 17 (Lombok 1.18.30 breaks on Java 22+) and Mailpit (`brew install m
 
 ```bash
 mailpit &
-cd prbs-services
+cd prbs-backend
 export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
-
-# In separate terminals, in this order:
-( cd eureka-server         && mvn spring-boot:run )
-( cd api-gateway           && mvn spring-boot:run )
-( cd user-service          && mvn spring-boot:run )
-( cd auth-service          && mvn spring-boot:run )
-( cd booking-service       && mvn spring-boot:run )
-( cd notification-service  && mvn spring-boot:run )
+mvn spring-boot:run
 ```
 
-Then the frontend talks to **`http://localhost:8080`** for everything. Eureka dashboard at `:8761`, Mailpit at `:8025`.
+Then:
+- API: <http://localhost:8080>
+- Swagger UI: <http://localhost:8080/swagger-ui.html>
+- Mailpit: <http://localhost:8025>
 
-The full Postman collection (in the now-deleted `prbs-backend/postman/`, history preserved in git) works unchanged against the gateway.
+Or all-in-one with `docker compose up --build` (mailpit + prbs-backend).
 
 ## Source of truth
 
 - **[task_list.md](task_list.md)** — original P2 (Auth & Notifications) checklist. All done.
 - **[P1_TaskList.md](P1_TaskList.md)** — P1 (entities + admin + bookings + availability) checklist. All done.
-- **[prbs-services/MIGRATION.md](prbs-services/MIGRATION.md)** — how the monolith was carved into microservices.
-- **[prbs-services/README.md](prbs-services/README.md)** — how to run everything.
+- **[prbs-backend/README.md](prbs-backend/README.md)** — how to run everything.
 
-## Endpoints (all reachable via gateway on :8080)
+## Endpoints
 
 ```
-POST   /api/v1/auth/send-otp                 auth-service       any
-POST   /api/v1/auth/verify-otp               auth-service       any
-POST   /api/v1/auth/refresh                  auth-service       any
-POST   /api/v1/auth/logout                   auth-service       any
+POST   /api/v1/auth/send-otp                  any
+POST   /api/v1/auth/verify-otp                any
+POST   /api/v1/auth/refresh                   any
+POST   /api/v1/auth/logout                    any
 
-GET    /api/v1/me                            user-service       authenticated
-GET    /api/v1/users                         user-service       ADMIN
-PATCH  /api/v1/users/{id}/status             user-service       ADMIN
-POST   /api/v1/users/import                  user-service       ADMIN
-GET    /api/v1/settings                      user-service       ADMIN
-PATCH  /api/v1/settings                      user-service       ADMIN
+GET    /api/v1/me                             authenticated
+GET    /api/v1/users                          ADMIN
+PATCH  /api/v1/users/{id}/status              ADMIN
+POST   /api/v1/users/import                   ADMIN
+GET    /api/v1/settings                       ADMIN
+PATCH  /api/v1/settings                       ADMIN
 
-POST   /api/v1/bookings                      booking-service    STUDENT
-GET    /api/v1/bookings/me                   booking-service    authenticated
-PATCH  /api/v1/bookings/{id}/cancel          booking-service    booking participant
-PATCH  /api/v1/bookings/{id}/status          booking-service    SUPERVISOR
+POST   /api/v1/bookings                       STUDENT
+GET    /api/v1/bookings/me                    authenticated
+PATCH  /api/v1/bookings/{id}/cancel           booking participant
+PATCH  /api/v1/bookings/{id}/status           SUPERVISOR
 
-GET    /api/v1/availability                  booking-service    authenticated
-POST   /api/v1/availability                  booking-service    SUPERVISOR
-DELETE /api/v1/availability/{id}             booking-service    owning SUPERVISOR
-GET    /api/v1/availability/{id}/slots       booking-service    authenticated
+GET    /api/v1/availability                   authenticated
+POST   /api/v1/availability                   SUPERVISOR
+DELETE /api/v1/availability/{id}              owning SUPERVISOR
+GET    /api/v1/availability/{id}/slots        authenticated
 ```
 
-In-cluster only (not routed by gateway):
-```
-GET  /api/v1/users/by-email                  user-service       called by auth-service
-GET  /api/v1/users/by-id/{id}                user-service       called by booking-service
-GET  /api/v1/settings/internal               user-service       called by booking-service
-POST /internal/emails/{otp,booking-confirmation,reminder,supervisor-alert}   notification-service
-```
+## Conventions
 
-## Conventions across the services
-
-- **Each service validates JWTs independently.** Same `JWT_SECRET` env var across all. The gateway routes but does not validate.
-- **No service touches another service's tables.** Cross-service reads go through Feign clients resolved via Eureka.
-- **`prbs-shared` is for cross-cutting only** (JWT, error envelope). Domain DTOs live in their owning service.
-- **Database per service** in production; one Postgres with separate schemas for prototype.
-- **One Flyway migration directory per service**, owning a non-overlapping set of tables.
+- **Module ownership.** Each module owns its tables, entities, repositories, controllers, and exceptions. Other modules read through the owning repository or service injected at the boundary — never by importing another module's DTOs into a controller, or reaching past a service to a repository.
+- **`config/` is for cross-cutting only.** Security, the JWT filter, the global error handler. Nothing domain-specific.
+- **One Flyway migration sequence** at `src/main/resources/db/migration/`. Tables owned by their module but versioned together.
+- **JWT validation** happens inside `JwtAuthenticationFilter` once per request. `SecurityConfig` is the single filter chain.
+- **HTML-escape all user input** before substituting it into email templates (see `EmailService`).
 
 ## Production env vars
 
 ```bash
-export JWT_SECRET="<32+ chars from secrets manager>"     # required for all services
-export MAIL_HOST=smtp.sendgrid.net                       # notification-service only
+export JWT_SECRET="<32+ chars from secrets manager>"
+export MAIL_HOST=smtp.sendgrid.net
 export MAIL_PORT=587
 export MAIL_USERNAME=apikey
 export MAIL_PASSWORD=SG.xxx
 export MAIL_FROM=noreply@auca.ac.rw
-export CORS_ALLOWED_ORIGINS=https://prbs.auca.ac.rw      # gateway only
-export EUREKA_URL=http://eureka:8761/eureka/             # all services
-export SPRING_PROFILES_ACTIVE=postgres                   # services with a DB
+export CORS_ALLOWED_ORIGINS=https://prbs.auca.ac.rw
+export SPRING_PROFILES_ACTIVE=postgres
 export DB_URL=jdbc:postgresql://...
 export DB_USER=...
 export DB_PASSWORD=...
@@ -149,10 +152,14 @@ export DB_PASSWORD=...
 
 The frontend is unchanged from its mocked-data state. The contracts above are stable, so wiring is a transport swap:
 
-- Replace `Login.jsx`'s simulated OTP with `POST /api/v1/auth/send-otp` + `/verify-otp` (against the gateway)
+- Replace `Login.jsx`'s simulated OTP with `POST /api/v1/auth/send-otp` + `/verify-otp`
 - Store the access + refresh tokens in `sessionStorage`
 - Replace the email-substring role match in `App.jsx` with `user.role` from the `AuthResponse`
 - Add a fetch interceptor that calls `/api/v1/auth/refresh` on 401
-- Configure CORS in the gateway (`CORS_ALLOWED_ORIGINS`) if the React dev server runs on a different host
+- Configure CORS in the backend (`CORS_ALLOWED_ORIGINS`) if the React dev server runs on a different host
 
 `prbs-app/`'s internal data model (`MOCK_BOOKINGS_INIT`, `MOCK_AVAILABILITY`, etc.) deliberately matches the backend's DTO shapes — wiring is a transport swap, not a model rewrite.
+
+## Why modular monolith and not microservices
+
+The microservices split (now retired) was a useful exercise — it forced clean module boundaries — but in operation it bought us complexity (6 JVMs, Eureka, Feign, distributed token validation) for no scale we actually need at prototype stage. The modular monolith keeps the same discipline as a future-state insurance policy: when any one of these packages outgrows the deployable, its entity/repository/service/controller/dto/exception split is already what you'd carve into a service.

@@ -4,8 +4,4 @@ target/
 .vscode/
 .DS_Store
 HELP.md
-
-# Real environment values — never commit. See .env.example for the template.
 .env
-.env.local
-.env.*.local

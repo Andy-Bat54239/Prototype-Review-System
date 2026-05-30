@@ -1,24 +1,23 @@
 spring:
   application:
     name: prbs-backend
+
   datasource:
     url: jdbc:h2:mem:prbs;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    properties:
-      hibernate.format_sql: true
+
   flyway:
     enabled: true
     locations: classpath:db/migration
+
   mail:
-    # Defaults talk to Mailpit on localhost:1025 with no auth. Override via env
-    # vars (see .env.example) to deliver to a real inbox via Outlook / Gmail /
-    # SendGrid / etc.
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
     username: ${MAIL_USERNAME:}
@@ -26,6 +25,9 @@ spring:
     properties:
       mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
       mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+
+server:
+  port: 8080
 
 jwt:
   secret: ${JWT_SECRET:dev-only-fallback-secret-do-not-use-in-production-min-32}
@@ -35,6 +37,11 @@ mail:
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
 
 ---
 spring:

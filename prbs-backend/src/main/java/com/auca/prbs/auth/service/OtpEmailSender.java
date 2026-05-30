@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -36,9 +37,12 @@ public class OtpEmailSender {
             helper.setSubject("Your PRBS Login Code");
             helper.setText(html(name, otp), true);
             mailSender.send(message);
-        } catch (MessagingException e) {
-            log.error("OTP email send failed for {}", to, e);
-            throw new RuntimeException("OTP send failed", e);
+        } catch (MessagingException | MailException e) {
+            // Swallow the failure so /send-otp stays 200 (anti-enumeration).
+            // The OTP record is already in the DB; only the email delivery failed.
+            // Ops sees the error in the log; the user just doesn't get an email.
+            log.error("OTP email delivery failed for {} (SMTP/template error). " +
+                      "Code remains valid in DB — investigate mail config.", to, e);
         }
     }
 

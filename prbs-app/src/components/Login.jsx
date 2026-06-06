@@ -2,6 +2,7 @@ import { useState } from 'react';
 import logoUrl from '../assets/logo.png';
 import campusUrl from '../assets/campus.jpg';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { api } from '../api';
 
 export default function Login({ onLogin }) {
   const [step, setStep] = useState('email');
@@ -11,11 +12,18 @@ export default function Login({ onLogin }) {
   const [err, setErr] = useState('');
   const { isMobile } = useBreakpoint();
 
-  const sendOTP = () => {
+  const sendOTP = async () => {
     if (!email.includes('@')) { setErr('Please enter a valid email address.'); return; }
     setErr('');
     setLoading(true);
-    setTimeout(() => { setLoading(false); setStep('otp'); }, 1200);
+    try {
+      await api.sendOtp(email.trim());
+      setStep('otp');
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOtpChange = (i, v) => {
@@ -30,16 +38,17 @@ export default function Login({ onLogin }) {
     if (e.key === 'Backspace' && !otp[i] && i > 0) document.getElementById(`otp-${i - 1}`)?.focus();
   };
 
-  const verifyOTP = () => {
+  const verifyOTP = async () => {
     setLoading(true);
-    setTimeout(() => {
+    setErr('');
+    try {
+      const user = await api.verifyOtp(email.trim(), otp.join(''));
+      onLogin(user);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
       setLoading(false);
-      const em = email.toLowerCase();
-      let role = 'student';
-      if (em.includes('supervisor')) role = 'supervisor';
-      else if (em.includes('admin')) role = 'admin';
-      onLogin({ email, role });
-    }, 1000);
+    }
   };
 
   const filled = otp.every(d => d !== '');
@@ -136,11 +145,12 @@ export default function Login({ onLogin }) {
                   />
                 ))}
               </div>
+              {err && <p style={{ color: '#D04040', fontSize: 13, margin: '0 0 14px' }}>{err}</p>}
               <button onClick={verifyOTP} disabled={!filled || loading}
                 style={{ width: '100%', padding: '14px', background: filled && !loading ? '#1D5BAF' : '#A5BFE0', color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: filled && !loading ? 'pointer' : 'default', fontFamily: 'DM Sans, sans-serif' }}>
                 {loading ? 'Verifying…' : 'Verify & Sign In →'}
               </button>
-              <p style={{ marginTop: 16, fontSize: 13, color: '#7A7069' }}>Any 6-digit code will work for this demo.</p>
+              <p style={{ marginTop: 16, fontSize: 13, color: '#7A7069' }}>Use the 6-digit code sent by the backend email service.</p>
             </div>
           )}
         </div>

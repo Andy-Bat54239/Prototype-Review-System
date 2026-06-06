@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { generateSlots, fmt12, fmtDate } from '../data';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { adaptBooking, api } from '../api';
 
 function MiniCalendar({ availDates, selectedDate, setSelectedDate, bookings, isMobile }) {
-  const [viewMonth, setViewMonth] = useState(() => new Date('2026-04-01'));
+  const [viewMonth, setViewMonth] = useState(() => {
+    const first = availDates[0] || new Date().toISOString().slice(0, 10);
+    return new Date(`${first.slice(0, 7)}-01T00:00:00`);
+  });
+
+  useEffect(() => {
+    if (availDates.length === 0) return;
+    setViewMonth(new Date(`${availDates[0].slice(0, 7)}-01T00:00:00`));
+  }, [availDates[0]]);
 
   const year = viewMonth.getFullYear();
   const month = viewMonth.getMonth();
@@ -14,7 +23,7 @@ function MiniCalendar({ availDates, selectedDate, setSelectedDate, bookings, isM
 
   const pad = d => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   const hasAvail = d => availDates.includes(pad(d));
-  const isPast = d => new Date(pad(d)) < new Date('2026-04-23');
+  const isPast = d => new Date(`${pad(d)}T23:59:59`) < new Date();
 
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -61,13 +70,23 @@ function MiniCalendar({ availDates, selectedDate, setSelectedDate, bookings, isM
 function BookingForm({ slot, date, onBook, onClose, isMobile }) {
   const [form, setForm] = useState({ name: '', studentId: '', group: '', project: '' });
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const valid = form.name && form.studentId && form.group && form.project;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!valid) return;
-    onBook({ ...form, date, time: slot });
-    setSubmitted(true);
+    setSaving(true);
+    setErr('');
+    try {
+      await onBook({ ...form, date, time: slot });
+      setSubmitted(true);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (submitted) return (
@@ -103,33 +122,55 @@ function BookingForm({ slot, date, onBook, onClose, isMobile }) {
               onBlur={e => e.target.style.borderColor = '#EDE9E2'} />
           </div>
         ))}
+        {err && <p style={{ color: '#D04040', fontSize: 13, margin: '0 0 12px' }}>{err}</p>}
         <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '12px', border: '1.5px solid #EDE9E2', borderRadius: 10, background: 'white', fontSize: 14.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', color: '#7A7069' }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={!valid} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: 10, background: valid ? '#1D5BAF' : '#A5BFE0', color: 'white', fontSize: 14.5, fontWeight: 600, cursor: valid ? 'pointer' : 'default', fontFamily: 'DM Sans, sans-serif' }}>Confirm Booking</button>
+          <button onClick={handleSubmit} disabled={!valid || saving} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: 10, background: valid && !saving ? '#1D5BAF' : '#A5BFE0', color: 'white', fontSize: 14.5, fontWeight: 600, cursor: valid && !saving ? 'pointer' : 'default', fontFamily: 'DM Sans, sans-serif' }}>{saving ? 'Booking...' : 'Confirm Booking'}</button>
         </div>
       </div>
     </div>
   );
 }
 
-export default function StudentDashboard({ activeTab, bookings, setBookings, availability }) {
+export default function StudentDashboard({ activeTab, bookings, setBookings, availability, dataLoading, dataError, onRefresh }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const { isMobile } = useBreakpoint();
 
   const availDates = availability.map(a => a.date);
-  const myBooking = bookings.find(b => b.studentId === 'CURRENT');
+  const myBooking = bookings.find(b => b.status !== 'cancelled');
   const slotsForDate = selectedDate ? (() => {
     const av = availability.find(a => a.date === selectedDate);
     return av ? generateSlots(av) : [];
   })() : [];
   const bookedSlots = selectedDate ? bookings.filter(b => b.date === selectedDate).map(b => b.time) : [];
 
-  const handleBook = (data) => {
-    setBookings(prev => [...prev, { id: Date.now(), studentId: 'CURRENT', name: data.name, group: parseInt(data.group), project: data.project, date: data.date, time: data.time, status: 'confirmed', meetUrl: 'https://meet.google.com/new-booking' }]);
+  const handleBook = async (data) => {
+    const av = availability.find(a => a.date === data.date);
+    if (!av) throw new Error('Please select an available date first.');
+    const created = await api.createBooking({
+      availabilityId: av.id,
+      slotTime: data.time,
+      project: data.project,
+      groupNumber: parseInt(data.group),
+    });
+    setBookings(prev => [adaptBooking(created), ...prev]);
   };
-  const handleCancel = () => setBookings(prev => prev.filter(b => b.studentId !== 'CURRENT'));
+  const handleCancel = async () => {
+    if (!myBooking) return;
+    setCanceling(true);
+    try {
+      await api.cancelBooking(myBooking.id);
+      await onRefresh();
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  if (dataLoading) return <div style={{ color: '#7A7069', fontSize: 15 }}>Loading your booking workspace...</div>;
+  if (dataError) return <div style={{ background: 'white', borderRadius: 12, padding: 24, border: '1px solid #EDE9E2', color: '#D04040' }}>{dataError}</div>;
 
   if (activeTab === 'mybooking') {
     return (
@@ -160,7 +201,7 @@ export default function StudentDashboard({ activeTab, bookings, setBookings, ava
                 </div>
               ))}
             </div>
-            <button onClick={handleCancel} style={{ background: 'none', border: '1.5px solid #EDE9E2', borderRadius: 10, padding: '10px 20px', fontSize: 14, color: '#D04040', fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>Cancel Booking</button>
+            <button onClick={handleCancel} disabled={canceling} style={{ background: 'none', border: '1.5px solid #EDE9E2', borderRadius: 10, padding: '10px 20px', fontSize: 14, color: '#D04040', fontWeight: 600, cursor: canceling ? 'default' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{canceling ? 'Canceling...' : 'Cancel Booking'}</button>
           </div>
         ) : (
           <div style={{ background: 'white', borderRadius: 14, padding: 48, textAlign: 'center', border: '1px solid #EDE9E2' }}>

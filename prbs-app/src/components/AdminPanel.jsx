@@ -1,23 +1,60 @@
-import { useState } from 'react';
-import { MOCK_USERS, MOCK_SETTINGS_INIT } from '../data';
+import { useEffect, useState } from 'react';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { adaptUser, api } from '../api';
 
 export default function AdminPanel({ activeTab }) {
-  const [users, setUsers] = useState(() => MOCK_USERS.map(u => ({ ...u, otpReset: false })));
-  const [settings, setSettings] = useState({ ...MOCK_SETTINGS_INIT });
+  const [users, setUsers] = useState([]);
+  const [settings, setSettings] = useState({ otpExpiry: 10, cancelWindow: 60, reminderTime: 30 });
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
   const { isMobile } = useBreakpoint();
 
-  const toggleStatus = (id) => setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } : u));
-  const resetOtp = (id) => setUsers(prev => prev.map(u => u.id === id ? { ...u, otpReset: true } : u));
+  useEffect(() => {
+    let alive = true;
+    async function loadAdminData() {
+      setLoading(true);
+      setErr('');
+      try {
+        const [userRows, settingsRow] = await Promise.all([api.users(), api.settings()]);
+        if (!alive) return;
+        setUsers(userRows.map(adaptUser));
+        setSettings(settingsRow);
+      } catch (e) {
+        if (alive) setErr(e.message);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+    loadAdminData();
+    return () => { alive = false; };
+  }, []);
+
+  const toggleStatus = async (id) => {
+    const current = users.find(u => u.id === id);
+    if (!current) return;
+    const nextStatus = current.status === 'Active' ? 'INACTIVE' : 'ACTIVE';
+    const savedUser = await api.updateUserStatus(id, nextStatus);
+    setUsers(prev => prev.map(u => u.id === id ? adaptUser(savedUser) : u));
+  };
   const setS = (k, v) => setSettings(s => ({ ...s, [k]: v }));
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async () => {
+    setErr('');
+    try {
+      const savedSettings = await api.updateSettings(settings);
+      setSettings(savedSettings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setErr(e.message);
+    }
   };
 
   const roleColors = { Student: ['#E5EDF8', '#1D5BAF'], Supervisor: ['#E8EEF4', '#1A4F7A'], Admin: ['#F4ECE6', '#7A3B0B'] };
+
+  if (loading) return <div style={{ color: '#7A7069', fontSize: 15 }}>Loading admin workspace...</div>;
+  if (err) return <div style={{ background: 'white', borderRadius: 12, padding: 24, border: '1px solid #EDE9E2', color: '#D04040' }}>{err}</div>;
 
   if (activeTab === 'settings') {
     return (
@@ -27,7 +64,7 @@ export default function AdminPanel({ activeTab }) {
         <div style={{ background: 'white', borderRadius: 14, padding: isMobile ? 20 : 32, border: '1px solid #EDE9E2', boxShadow: '0 2px 8px rgba(28,24,20,0.05)' }}>
           {[
             { key: 'otpExpiry',     label: 'OTP Expiry',            desc: 'How long a one-time passcode remains valid before expiring.',          unit: 'minutes', min: 1,  max: 60   },
-            { key: 'cancelWindow',  label: 'Cancellation Window',   desc: 'Minimum notice required for a student to cancel a booking.',           unit: 'minutes', min: 0,  max: 1440 },
+            { key: 'cancelWindow',  label: 'Cancellation Window',   desc: 'Minimum notice required for a student to cancel a booking.',           unit: 'minutes', min: 1,  max: 1440 },
             { key: 'reminderTime',  label: 'Reminder Time',         desc: 'How early to send session reminder notifications.',                    unit: 'minutes', min: 5,  max: 120  },
           ].map(({ key, label, desc, unit, min, max }) => (
             <div key={key} style={{ marginBottom: 28, paddingBottom: 28, borderBottom: '1px solid #F8F5F0' }}>
@@ -99,10 +136,6 @@ export default function AdminPanel({ activeTab }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ background: roleBg, color: roleColor, fontSize: 11.5, fontWeight: 700, padding: '3px 12px', borderRadius: 20 }}>{user.role}</span>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => resetOtp(user.id)}
-                      style={{ background: user.otpReset ? '#E8F4E8' : '#F8F5F0', color: user.otpReset ? '#2E7D32' : '#7A7069', border: '1px solid #EDE9E2', borderRadius: 7, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                      {user.otpReset ? '✓ Reset' : 'Reset OTP'}
-                    </button>
                     <button onClick={() => toggleStatus(user.id)}
                       style={{ background: user.status === 'Active' ? '#FDE8E8' : '#E8F4E8', color: user.status === 'Active' ? '#C62828' : '#2E7D32', border: 'none', borderRadius: 7, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                       {user.status === 'Active' ? 'Deactivate' : 'Activate'}
@@ -152,10 +185,6 @@ export default function AdminPanel({ activeTab }) {
                     </td>
                     <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <button onClick={() => resetOtp(user.id)}
-                          style={{ background: user.otpReset ? '#E8F4E8' : '#F8F5F0', color: user.otpReset ? '#2E7D32' : '#7A7069', border: '1px solid #EDE9E2', borderRadius: 7, padding: '5px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-                          {user.otpReset ? '✓ OTP Reset' : 'Reset OTP'}
-                        </button>
                         <button onClick={() => toggleStatus(user.id)}
                           style={{ background: user.status === 'Active' ? '#FDE8E8' : '#E8F4E8', color: user.status === 'Active' ? '#C62828' : '#2E7D32', border: 'none', borderRadius: 7, padding: '5px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                           {user.status === 'Active' ? 'Deactivate' : 'Activate'}

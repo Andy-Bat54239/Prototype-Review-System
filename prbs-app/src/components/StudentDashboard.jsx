@@ -201,7 +201,25 @@ export default function StudentDashboard({ activeTab, bookings, setBookings, ava
                 </div>
               ))}
             </div>
-            <button onClick={handleCancel} disabled={canceling} style={{ background: 'none', border: '1.5px solid #EDE9E2', borderRadius: 10, padding: '10px 20px', fontSize: 14, color: '#D04040', fontWeight: 600, cursor: canceling ? 'default' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{canceling ? 'Canceling...' : 'Cancel Booking'}</button>
+            {myBooking.meetUrl && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 11.5, color: '#B8AFA2', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Google Meet Link</div>
+                <a href={myBooking.meetUrl} target="_blank" rel="noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F8F5F0', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#1D5BAF', fontWeight: 600, textDecoration: 'none', border: '1px solid #EDE9E2', wordBreak: 'break-all' }}>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="#1D5BAF" strokeWidth="2" strokeLinecap="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="#1D5BAF" strokeWidth="2" strokeLinecap="round"/></svg>
+                  {myBooking.meetUrl}
+                </a>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 12 }}>
+              {myBooking.meetUrl && (
+                <a href={myBooking.meetUrl} target="_blank" rel="noreferrer"
+                  style={{ display: 'inline-block', textAlign: 'center', background: '#1D5BAF', color: 'white', padding: '10px 20px', borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: 'none', fontFamily: 'DM Sans, sans-serif' }}>
+                  Join Meeting
+                </a>
+              )}
+              <button onClick={handleCancel} disabled={canceling} style={{ background: 'none', border: '1.5px solid #EDE9E2', borderRadius: 10, padding: '10px 20px', fontSize: 14, color: '#D04040', fontWeight: 600, cursor: canceling ? 'default' : 'pointer', fontFamily: 'DM Sans, sans-serif' }}>{canceling ? 'Canceling...' : 'Cancel Booking'}</button>
+            </div>
           </div>
         ) : (
           <div style={{ background: 'white', borderRadius: 14, padding: 48, textAlign: 'center', border: '1px solid #EDE9E2' }}>

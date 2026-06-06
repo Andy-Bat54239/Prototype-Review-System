@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { generateSlots, fmt12, fmtDate, ANALYTICS_DATA } from '../data';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { adaptAvailability, adaptBooking, api } from '../api';
 
 function StatusBadge({ status }) {
   const map = {
@@ -246,16 +247,34 @@ function AvailabilityTab({ availability, setAvailability, isMobile }) {
   const [form, setForm] = useState({ date: '', start: '09:00', end: '11:00', duration: '15', meetUrl: '' });
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const [added, setAdded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
 
   const preview = form.date && form.start && form.end && form.duration
     ? generateSlots({ start: form.start, end: form.end, duration: parseInt(form.duration) })
     : [];
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.date || !form.meetUrl) return;
-    setAvailability(prev => [...prev.filter(a => a.date !== form.date), { date: form.date, start: form.start, end: form.end, duration: parseInt(form.duration), meetUrl: form.meetUrl }]);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2500);
+    setSaving(true);
+    setErr('');
+    try {
+      const saved = await api.createAvailability({
+        date: form.date,
+        startTime: form.start,
+        endTime: form.end,
+        durationMinutes: parseInt(form.duration),
+        meetUrl: form.meetUrl,
+      });
+      const adapted = adaptAvailability(saved);
+      setAvailability(prev => [...prev.filter(a => a.id !== adapted.id), adapted].sort((a, b) => a.date.localeCompare(b.date)));
+      setAdded(true);
+      setTimeout(() => setAdded(false), 2500);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -272,8 +291,9 @@ function AvailabilityTab({ availability, setAvailability, isMobile }) {
               onBlur={e => e.target.style.borderColor = '#EDE9E2'} />
           </div>
         ))}
-        <button onClick={handleAdd} style={{ width: '100%', padding: '12px', background: '#1D5BAF', color: 'white', border: 'none', borderRadius: 10, fontSize: 14.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', marginTop: 8 }}>
-          {added ? '✓ Availability Added!' : 'Generate Slots →'}
+        {err && <p style={{ color: '#D04040', fontSize: 13, margin: '0 0 12px' }}>{err}</p>}
+        <button onClick={handleAdd} disabled={saving} style={{ width: '100%', padding: '12px', background: saving ? '#7AAAD8' : '#1D5BAF', color: 'white', border: 'none', borderRadius: 10, fontSize: 14.5, fontWeight: 600, cursor: saving ? 'default' : 'pointer', fontFamily: 'DM Sans, sans-serif', marginTop: 8 }}>
+          {saving ? 'Saving...' : added ? '✓ Availability Added!' : 'Generate Slots →'}
         </button>
       </div>
       <div>
@@ -307,17 +327,26 @@ function AvailabilityTab({ availability, setAvailability, isMobile }) {
   );
 }
 
-export default function SupervisorDashboard({ activeTab, setActiveTab, bookings, setBookings, availability, setAvailability }) {
-  const [selectedDate, setSelectedDate] = useState('2026-04-25');
+export default function SupervisorDashboard({ activeTab, setActiveTab, bookings, setBookings, availability, setAvailability, dataLoading, dataError }) {
+  const [selectedDate, setSelectedDate] = useState('');
   const [notif, setNotif] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const { isMobile } = useBreakpoint();
 
-  const onMark = (id, status) => setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+  const onMark = async (id, status) => {
+    const saved = await api.updateBookingStatus(id, status.toUpperCase().replace('-', '_'));
+    const adapted = adaptBooking(saved);
+    setBookings(prev => prev.map(b => b.id === id ? adapted : b));
+    setSelectedStudent(current => current?.id === id ? adapted : current);
+  };
 
   const bookingsByDate = {};
   bookings.forEach(b => { if (!bookingsByDate[b.date]) bookingsByDate[b.date] = []; bookingsByDate[b.date].push(b); });
   const upcomingDates = [...new Set(bookings.map(b => b.date))].sort();
+  const currentDate = selectedDate || upcomingDates[0] || '';
+
+  if (dataLoading) return <div style={{ color: '#7A7069', fontSize: 15 }}>Loading supervisor workspace...</div>;
+  if (dataError) return <div style={{ background: 'white', borderRadius: 12, padding: 24, border: '1px solid #EDE9E2', color: '#D04040' }}>{dataError}</div>;
 
   if (activeTab === 'analytics') return <AnalyticsTab bookings={bookings} isMobile={isMobile} />;
 
@@ -335,7 +364,7 @@ export default function SupervisorDashboard({ activeTab, setActiveTab, bookings,
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           {upcomingDates.map(date => {
             const count = (bookingsByDate[date] || []).length;
-            const sel = selectedDate === date;
+            const sel = currentDate === date;
             return (
               <button key={date} onClick={() => { setSelectedDate(date); setActiveTab('sessions'); }}
                 style={{ padding: '14px 20px', borderRadius: 12, border: '1.5px solid', borderColor: sel ? '#1D5BAF' : '#EDE9E2', background: sel ? '#1D5BAF' : 'white', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s', textAlign: 'left' }}>
@@ -351,7 +380,7 @@ export default function SupervisorDashboard({ activeTab, setActiveTab, bookings,
     );
   }
 
-  const dayBookings = (bookingsByDate[selectedDate] || []).sort((a, b) => a.time.localeCompare(b.time));
+  const dayBookings = (bookingsByDate[currentDate] || []).sort((a, b) => a.time.localeCompare(b.time));
   return (
     <div>
       {notif && (
@@ -367,12 +396,12 @@ export default function SupervisorDashboard({ activeTab, setActiveTab, bookings,
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 16 : 0, marginBottom: 24 }}>
         <div>
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 26, color: '#1C1814', margin: '0 0 4px' }}>Today's Sessions</h2>
-          <p style={{ color: '#7A7069', fontSize: 14.5, margin: 0 }}>{fmtDate(selectedDate)}</p>
+          <p style={{ color: '#7A7069', fontSize: 14.5, margin: 0 }}>{currentDate ? fmtDate(currentDate) : 'No sessions scheduled yet'}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {upcomingDates.map(d => (
             <button key={d} onClick={() => setSelectedDate(d)}
-              style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid', borderColor: selectedDate === d ? '#1D5BAF' : '#EDE9E2', background: selectedDate === d ? '#1D5BAF' : 'white', color: selectedDate === d ? 'white' : '#7A7069', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s' }}>
+              style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid', borderColor: currentDate === d ? '#1D5BAF' : '#EDE9E2', background: currentDate === d ? '#1D5BAF' : 'white', color: currentDate === d ? 'white' : '#7A7069', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s' }}>
               {new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </button>
           ))}

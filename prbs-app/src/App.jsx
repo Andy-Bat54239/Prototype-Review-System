@@ -1,38 +1,60 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import StudentDashboard from './components/StudentDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
 import AdminPanel from './components/AdminPanel';
-import { MOCK_BOOKINGS_INIT, MOCK_AVAILABILITY } from './data';
 import { useBreakpoint } from './hooks/useBreakpoint';
+import { adaptAvailability, adaptBooking, api, clearSession, getStoredUser } from './api';
 
 const DEFAULT_TABS = { student: 'calendar', supervisor: 'sessions', admin: 'users' };
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => getStoredUser());
   const [activeTab, setActiveTab] = useState('calendar');
-  const [bookings, setBookings] = useState([...MOCK_BOOKINGS_INIT]);
-  const [availability, setAvailability] = useState([...MOCK_AVAILABILITY]);
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+  const [bookings, setBookings] = useState([]);
+  const [availability, setAvailability] = useState([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { isMobile } = useBreakpoint();
+
+  const loadWorkspaceData = async () => {
+    if (!user) return;
+    setDataLoading(true);
+    setDataError('');
+    try {
+      const [bookingRows, availabilityRows] = await Promise.all([
+        api.bookings(),
+        api.availability(),
+      ]);
+      setBookings(bookingRows.map(adaptBooking));
+      setAvailability(availabilityRows.map(adaptAvailability));
+    } catch (e) {
+      setDataError(e.message);
+      if (e.message.includes('session expired')) {
+        clearSession();
+        setUser(null);
+      }
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWorkspaceData();
+  }, [user?.id]);
 
   const handleLogin = (userData) => {
     setUser(userData);
     setActiveTab(DEFAULT_TABS[userData.role] || 'calendar');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await api.logout();
     setUser(null);
-    setBookings([...MOCK_BOOKINGS_INIT]);
-  };
-
-  const switchRole = (role) => {
-    const emails = { student: 'alice@university.ac.rw', supervisor: 'supervisor@university.ac.rw', admin: 'admin@university.ac.rw' };
-    setUser({ email: emails[role], role });
-    setActiveTab(DEFAULT_TABS[role]);
-    setShowRoleSwitcher(false);
+    setBookings([]);
+    setAvailability([]);
   };
 
   const notifCount = bookings.filter(b => b.status === 'confirmed').length;
@@ -40,8 +62,9 @@ export default function App() {
   if (!user) return <Login onLogin={handleLogin} />;
 
   const renderDashboard = () => {
-    if (user.role === 'student')    return <StudentDashboard    activeTab={activeTab} setActiveTab={setActiveTab} bookings={bookings} setBookings={setBookings} availability={availability} />;
-    if (user.role === 'supervisor') return <SupervisorDashboard activeTab={activeTab} setActiveTab={setActiveTab} bookings={bookings} setBookings={setBookings} availability={availability} setAvailability={setAvailability} />;
+    const shared = { dataLoading, dataError, onRefresh: loadWorkspaceData };
+    if (user.role === 'student')    return <StudentDashboard    activeTab={activeTab} setActiveTab={setActiveTab} bookings={bookings} setBookings={setBookings} availability={availability} {...shared} />;
+    if (user.role === 'supervisor') return <SupervisorDashboard activeTab={activeTab} setActiveTab={setActiveTab} bookings={bookings} setBookings={setBookings} availability={availability} setAvailability={setAvailability} {...shared} />;
     if (user.role === 'admin')      return <AdminPanel          activeTab={activeTab} />;
     return null;
   };
@@ -83,24 +106,9 @@ export default function App() {
               {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </div>
           )}
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowRoleSwitcher(s => !s)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F8F5F0', border: '1px solid #EDE9E2', borderRadius: 8, padding: isMobile ? '6px 10px' : '6px 14px', fontSize: 13, fontWeight: 600, color: '#1C1814', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F8F5F0', border: '1px solid #EDE9E2', borderRadius: 8, padding: isMobile ? '6px 10px' : '6px 14px', fontSize: 13, fontWeight: 600, color: '#1C1814', fontFamily: 'DM Sans, sans-serif' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#1D5BAF', display: 'inline-block' }} />
-              {isMobile ? 'Role ↕' : 'Switch Role ↕'}
-            </button>
-            {showRoleSwitcher && (
-              <div style={{ position: 'absolute', right: 0, top: '110%', background: 'white', border: '1px solid #EDE9E2', borderRadius: 10, boxShadow: '0 8px 24px rgba(28,24,20,0.12)', padding: 8, minWidth: 180, zIndex: 100 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#B8AFA2', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 12px 8px' }}>Demo: Switch Role</div>
-                {[['student', 'Student', 'alice@university.ac.rw'], ['supervisor', 'Supervisor', 'supervisor@...'], ['admin', 'Admin', 'admin@...']].map(([role, label, email]) => (
-                  <button key={role} onClick={() => switchRole(role)}
-                    style={{ width: '100%', display: 'flex', flexDirection: 'column', padding: '8px 12px', border: 'none', borderRadius: 7, background: user.role === role ? '#E5EDF8' : 'transparent', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', textAlign: 'left', marginBottom: 2 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: user.role === role ? '#1D5BAF' : '#1C1814' }}>{label}</span>
-                    <span style={{ fontSize: 11.5, color: '#B8AFA2' }}>{email}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+              <span>{isMobile ? user.role : `${user.name || user.email} · ${user.role}`}</span>
           </div>
         </div>
 
@@ -108,8 +116,6 @@ export default function App() {
           {renderDashboard()}
         </div>
       </div>
-
-      {showRoleSwitcher && <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={() => setShowRoleSwitcher(false)} />}
     </div>
   );
 }

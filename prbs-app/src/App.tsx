@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import StudentDashboard from './components/StudentDashboard';
@@ -6,18 +7,20 @@ import SupervisorDashboard from './components/SupervisorDashboard';
 import AdminPanel from './components/AdminPanel';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { adaptAvailability, adaptBooking, api, clearSession, getStoredUser } from './api';
+import { User, Booking, Availability } from './types';
 
-const DEFAULT_TABS = { student: 'calendar', supervisor: 'sessions', admin: 'users' };
+const DEFAULT_TABS: Record<string, string> = { student: 'calendar', supervisor: 'sessions', admin: 'users' };
 
 export default function App() {
-  const [user, setUser] = useState(() => getStoredUser());
-  const [activeTab, setActiveTab] = useState('calendar');
-  const [bookings, setBookings] = useState([]);
-  const [availability, setAvailability] = useState([]);
+  const [user, setUser] = useState<User | null>(() => getStoredUser());
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [availability, setAvailability] = useState<Availability[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { isMobile } = useBreakpoint();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const loadWorkspaceData = async () => {
     if (!user) return;
@@ -30,11 +33,12 @@ export default function App() {
       ]);
       setBookings(bookingRows.map(adaptBooking));
       setAvailability(availabilityRows.map(adaptAvailability));
-    } catch (e) {
+    } catch (e: any) {
       setDataError(e.message);
       if (e.message.includes('session expired')) {
         clearSession();
         setUser(null);
+        navigate('/login');
       }
     } finally {
       setDataLoading(false);
@@ -45,9 +49,23 @@ export default function App() {
     loadWorkspaceData();
   }, [user?.id]);
 
-  const handleLogin = (userData) => {
+  useEffect(() => {
+    if (!user) {
+      if (location.pathname !== '/login') {
+        navigate('/login');
+      }
+    } else {
+      if (location.pathname === '/login' || location.pathname === '/') {
+        const defaultTab = DEFAULT_TABS[user.role] || 'calendar';
+        navigate(`/${user.role}/${defaultTab}`);
+      }
+    }
+  }, [user, location.pathname]);
+
+  const handleLogin = (userData: User) => {
     setUser(userData);
-    setActiveTab(DEFAULT_TABS[userData.role] || 'calendar');
+    const defaultTab = DEFAULT_TABS[userData.role] || 'calendar';
+    navigate(`/${userData.role}/${defaultTab}`);
   };
 
   const handleLogout = async () => {
@@ -55,17 +73,62 @@ export default function App() {
     setUser(null);
     setBookings([]);
     setAvailability([]);
+    navigate('/login');
   };
 
   const notifCount = bookings.filter(b => b.status === 'confirmed').length;
 
-  if (!user) return <Login onLogin={handleLogin} />;
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login onLogin={handleLogin} />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  const pathParts = location.pathname.split('/');
+  const activeTab = pathParts[2] || DEFAULT_TABS[user.role];
+
+  const handleTabChange = (tab: string) => {
+    navigate(`/${user.role}/${tab}`);
+    setSidebarOpen(false);
+  };
 
   const renderDashboard = () => {
     const shared = { dataLoading, dataError, onRefresh: loadWorkspaceData };
-    if (user.role === 'student')    return <StudentDashboard    activeTab={activeTab} setActiveTab={setActiveTab} bookings={bookings} setBookings={setBookings} availability={availability} {...shared} />;
-    if (user.role === 'supervisor') return <SupervisorDashboard activeTab={activeTab} setActiveTab={setActiveTab} bookings={bookings} setBookings={setBookings} availability={availability} setAvailability={setAvailability} {...shared} />;
-    if (user.role === 'admin')      return <AdminPanel          activeTab={activeTab} />;
+    if (user.role === 'student') {
+      return (
+        <StudentDashboard
+          activeTab={activeTab}
+          bookings={bookings}
+          setBookings={setBookings}
+          availability={availability}
+          {...shared}
+        />
+      );
+    }
+    if (user.role === 'supervisor') {
+      return (
+        <SupervisorDashboard
+          activeTab={activeTab}
+          setActiveTab={handleTabChange}
+          bookings={bookings}
+          setBookings={setBookings}
+          availability={availability}
+          setAvailability={setAvailability}
+          {...shared}
+        />
+      );
+    }
+    if (user.role === 'admin') {
+      return (
+        <AdminPanel
+          activeTab={activeTab}
+          setActiveTab={handleTabChange}
+        />
+      );
+    }
     return null;
   };
 
@@ -74,7 +137,7 @@ export default function App() {
       <Sidebar
         user={user}
         activeTab={activeTab}
-        setActiveTab={(tab) => { setActiveTab(tab); setSidebarOpen(false); }}
+        setActiveTab={handleTabChange}
         notifCount={notifCount}
         onLogout={handleLogout}
         isMobile={isMobile}
@@ -113,7 +176,12 @@ export default function App() {
         </div>
 
         <div style={{ padding: isMobile ? '20px 16px' : '36px', maxWidth: 1100 }}>
-          {renderDashboard()}
+          <Routes>
+            <Route path="/student/:tab" element={renderDashboard()} />
+            <Route path="/supervisor/:tab" element={renderDashboard()} />
+            <Route path="/admin/:tab" element={renderDashboard()} />
+            <Route path="*" element={<Navigate to={`/${user.role}/${DEFAULT_TABS[user.role]}`} replace />} />
+          </Routes>
         </div>
       </div>
     </div>

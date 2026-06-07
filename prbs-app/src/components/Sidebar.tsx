@@ -1,4 +1,5 @@
 import logoUrl from '../assets/logo.png';
+import { User } from '../types';
 
 const ICONS = {
   calendar: <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.8"/><path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
@@ -10,7 +11,15 @@ const ICONS = {
   logout:   <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
-const NAV_BY_ROLE = {
+type IconKey = keyof typeof ICONS;
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: IconKey;
+}
+
+const NAV_BY_ROLE: Record<string, NavItem[]> = {
   student: [
     { id: 'calendar',  label: 'Book a Session',   icon: 'calendar' },
     { id: 'mybooking', label: 'My Booking',        icon: 'list'     },
@@ -27,13 +36,24 @@ const NAV_BY_ROLE = {
   ],
 };
 
-const ROLE_LABELS = { student: 'Student', supervisor: 'Supervisor', admin: 'Administrator' };
+const ROLE_LABELS: Record<string, string> = { student: 'Student', supervisor: 'Supervisor', admin: 'Administrator' };
 
-export default function Sidebar({ user, activeTab, setActiveTab, notifCount, onLogout, isMobile, isOpen, onClose }) {
+interface SidebarProps {
+  user: User;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  notifCount: number;
+  onLogout: () => void;
+  isMobile: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ user, activeTab, setActiveTab, notifCount, onLogout, isMobile, isOpen, onClose }: SidebarProps) {
   const nav = NAV_BY_ROLE[user.role] || [];
   const initials = user.email.slice(0, 2).toUpperCase();
 
-  const sidebarStyle = isMobile
+  const sidebarStyle: React.CSSProperties = isMobile
     ? {
         position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 200,
         width: 240,

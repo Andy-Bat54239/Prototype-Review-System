@@ -44,8 +44,8 @@ export const ANALYTICS_DATA = [
   { day: 'May 5',  sessions: 5 },
 ];
 
-export function generateSlots(avail) {
-  const slots = [];
+export function generateSlots(avail: { start: string; end: string; duration: number }): string[] {
+  const slots: string[] = [];
   const [sh, sm] = avail.start.split(':').map(Number);
   const [eh, em] = avail.end.split(':').map(Number);
   let cur = sh * 60 + sm;
@@ -59,14 +59,14 @@ export function generateSlots(avail) {
   return slots;
 }
 
-export function fmt12(t) {
+export function fmt12(t: string): string {
   const [h, m] = t.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-export function fmtDate(dateStr) {
+export function fmtDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
